@@ -29,11 +29,7 @@ public class Main {
         server.createContext("/health", new HttpHandler() {
             @Override
             public void handle(HttpExchange exchange) throws IOException {
-                String json = "{"
-                        + "\"status\":\"ok\","
-                        + "\"service\":\"vyapaarx-backend\""
-                        + "}";
-                sendJson(exchange, 200, json);
+                sendJson(exchange, 200, "{\"status\":\"ok\",\"service\":\"vyapaarx-backend\"}");
             }
         });
 
@@ -165,8 +161,6 @@ public class Main {
     }
 
     private static String escapeJson(String value) {
-        return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"");
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
