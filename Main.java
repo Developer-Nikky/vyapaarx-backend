@@ -28,7 +28,7 @@ public class Main {
             try {
                 if (handleHead(exchange)) return;
 
-                String accessToken = System.getenv("eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIzWUFIMjQiLCJqdGkiOiI2OWM4ZDY1N2FkNjUxNzZmNWQzNjU1ZjkiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzc0NzY5NzUxLCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3NzQ4MjE2MDB9.jq4B_VqnKasNfTnLCePiTXTvmtFyZkZmtM6rPh5Dj9Q");
+                String accessToken = System.getenv("UPSTOX_ACCESS_TOKEN");
                 if (accessToken == null || accessToken.isBlank()) {
                     sendJson(exchange, "{\"error\":\"Missing token\"}");
                     return;
