@@ -13,27 +13,36 @@ public class QuotesController {
 
     public static void handle(HttpExchange exchange) throws IOException {
         try {
+            String method = exchange.getRequestMethod();
+
+            if (!"GET".equalsIgnoreCase(method)) {
+                sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                return;
+            }
+
             String keys = getQueryParam(exchange.getRequestURI(), "keys");
+
             String response = QuotesService.getQuotes(keys);
-            sendJson(exchange, response);
+            sendJson(exchange, 200, response);
+
         } catch (Exception e) {
-            sendJson(exchange, "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            sendJson(exchange, 500, "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
         }
     }
 
-    private static void sendJson(HttpExchange exchange, String json) throws IOException {
+    private static void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.sendResponseHeaders(statusCode, bytes.length);
 
-        OutputStream os = exchange.getResponseBody();
-        os.write(bytes);
-        os.close();
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
     }
 
     private static String getQueryParam(URI uri, String key) {
         String query = uri.getRawQuery();
-        if (query == null) return null;
+        if (query == null || query.isBlank()) return null;
 
         for (String param : query.split("&")) {
             String[] pair = param.split("=", 2);
