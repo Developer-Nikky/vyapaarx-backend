@@ -1,9 +1,8 @@
 FROM eclipse-temurin:17-jdk
 
 WORKDIR /app
+COPY . .
 
-COPY Main.java .
-
-RUN javac Main.java
+RUN javac *.java
 
 CMD ["sh", "-c", "java Main"]
