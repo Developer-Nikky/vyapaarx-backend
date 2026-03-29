@@ -1,9 +1,9 @@
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 
 WORKDIR /app
 
-COPY . .
+COPY Main.java .
 
 RUN javac Main.java
 
-CMD ["java", "Main"]
+CMD ["sh", "-c", "java Main"]
