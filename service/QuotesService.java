@@ -1,30 +1,58 @@
-package controller;
+package service;
 
-import com.sun.net.httpserver.HttpExchange;
-import service.QuotesService;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
+import cache.MemoryCache;
+import connector.UpstoxConnector;
+import java.util.regex.*;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class QuotesController {
-    public static void handle(HttpExchange ex) {
-        try {
-            // Static Key Security for Phase 1
-            String auth = ex.getRequestHeaders().getFirst("Authorization");
-            if (auth == null || !auth.equals("Bearer VyapaarX_Alpha_2026")) {
-                send(ex, 401, "{\"error\":\"Unauthorized\"}");
-                return;
-            }
+public class QuotesService {
+    // Ye set store karega ki filhal users kaunse stocks dekh rahe hain
+    private static final Set<String> ACTIVE_SYMBOLS = ConcurrentHashMap.newKeySet();
 
-            send(ex, 200, QuotesService.getQuotesFromCache());
-        } catch (Exception e) {
-            try { send(ex, 500, "{\"error\":\"Server Error\"}"); } catch (Exception ignored) {}
-        }
+    static {
+        // Default indices jo hamesha update honge
+        ACTIVE_SYMBOLS.add("NSE_INDEX|Nifty 50");
+        ACTIVE_SYMBOLS.add("NSE_INDEX|Nifty Bank");
     }
 
-    private static void send(HttpExchange ex, int code, String body) throws java.io.IOException {
-        byte[] b = body.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        ex.sendResponseHeaders(code, b.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(b); }
+    public static void addSymbols(String keys) {
+        if (keys == null) return;
+        for (String k : keys.split(",")) ACTIVE_SYMBOLS.add(k.trim());
+    }
+
+    public static String getQuotesFromCache() {
+        return MemoryCache.get("live_data");
+    }
+
+    public static void refreshQuotes() {
+        try {
+            if (ACTIVE_SYMBOLS.isEmpty()) return;
+            String allKeys = String.join(",", ACTIVE_SYMBOLS);
+            String raw = UpstoxConnector.fetchLtpQuotes(allKeys);
+            
+            if (raw != null && !raw.contains("\"error\"")) {
+                MemoryCache.put("live_data", cleanData(raw));
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    private static String cleanData(String raw) {
+        // Regex jo har tarah ke stock aur index ka LTP aur Token nikal lega
+        Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{[^\\}]*?\"last_price\"\\s*:\\s*([0-9.]+)[^\\}]*?\"instrument_token\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher m = p.matcher(raw);
+        java.util.List<String> list = new java.util.ArrayList<>();
+        
+        while (m.find()) {
+            String fullKey = m.group(1); // e.g. NSE_EQ|INE002A01018
+            String ltp = m.group(2);
+            
+            // Symbol Name nikalne ka logic: NSE_INDEX|Nifty 50 -> NIFTY 50
+            String displayName = fullKey.contains("|") ? fullKey.split("\\|")[1] : fullKey;
+            
+            list.add(String.format("{\"symbol\":\"%s\",\"ltp\":%s}", displayName.toUpperCase(), ltp));
+        }
+        
+        return String.format("{\"timestamp\":%d,\"data\":[%s]}", System.currentTimeMillis(), String.join(",", list));
     }
 }
