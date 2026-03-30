@@ -1,41 +1,41 @@
-package service;
+package controller;
 
-import cache.MemoryCache;
-import connector.UpstoxConnector;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.sun.net.httpserver.HttpExchange;
+import service.QuotesService;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
-public class QuotesService {
-    private static final String KEYS = "NSE_INDEX|Nifty 50,NSE_INDEX|Nifty Bank";
-
-    // App dashboard calls this
-    public static String getQuotesFromCache() {
-        String data = MemoryCache.get("live_data");
-        return (data != null) ? data : "{\"status\":\"loading\",\"msg\":\"Warming up engine...\"}";
-    }
-
-    // Background Worker calls this every 1.5s
-    public static void refreshQuotes() {
+public class QuotesController {
+    public static void handle(HttpExchange ex) {
         try {
-            String raw = UpstoxConnector.fetchLtpQuotes(KEYS);
-            if (raw != null && !raw.contains("\"error\"")) {
-                MemoryCache.put("live_data", cleanData(raw));
+            // Security Check
+            String auth = ex.getRequestHeaders().getFirst("Authorization");
+            if (auth == null || !auth.equals("Bearer VyapaarX_Alpha_2026")) {
+                send(ex, 401, "{\"error\":\"Unauthorized\"}");
+                return;
             }
-        } catch (Exception e) {
-            System.err.println("Refresh Failed: " + e.getMessage());
-        }
-    }
 
-    private static String cleanData(String raw) {
-        Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{[^\\}]*?\"last_price\"\\s*:\\s*([0-9.]+)[^\\}]*?\"instrument_token\"\\s*:\\s*\"([^\"]+)\"");
-        Matcher m = p.matcher(raw);
-        java.util.List<String> list = new java.util.ArrayList<>();
-        
-        while (m.find()) {
-            String sym = m.group(3).contains("Nifty Bank") ? "BANKNIFTY" : "NIFTY";
-            list.add(String.format("{\"symbol\":\"%s\",\"ltp\":%s,\"instrument\":\"%s\"}", sym, m.group(2), m.group(3)));
-        }
-        
-        return String.format("{\"timestamp\":%d,\"data\":[%s]}", System.currentTimeMillis(), String.join(",", list));
+            // Check if App is requesting new symbols via ?symbols=NSE_EQ|RELIANCE
+            String query = ex.getRequestURI().getQuery();
+            if (query != null && query.contains("symbols=")) {
+                String symbols = query.split("symbols=")[1];
+                QuotesService.addSymbols(URLDecoder.decode(symbols, StandardCharsets.UTF_8));
+            }
+
+            byte[] b = QuotesService.getQuotesFromCache().getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().set("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.getResponseBody().close();
+            
+        } catch (Exception e) { /* log error */ }
+    }
+    
+    private static void send(HttpExchange ex, int code, String body) throws java.io.IOException {
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        ex.sendResponseHeaders(code, b.length);
+        ex.getResponseBody().write(b);
+        ex.getResponseBody().close();
     }
 }
