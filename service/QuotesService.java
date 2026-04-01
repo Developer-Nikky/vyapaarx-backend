@@ -35,17 +35,13 @@ public class QuotesService {
         String cacheKey = "quotes:" + finalKeys;
 
         String fresh = MemoryCache.getFresh(cacheKey);
-        if (fresh != null) {
-            return fresh;
-        }
+        if (fresh != null) return fresh;
 
         Object lock = LOCKS.computeIfAbsent(cacheKey, k -> new Object());
 
         synchronized (lock) {
             fresh = MemoryCache.getFresh(cacheKey);
-            if (fresh != null) {
-                return fresh;
-            }
+            if (fresh != null) return fresh;
 
             try {
                 String rawResponse = UpstoxConnector.fetchLtpQuotes(finalKeys);
@@ -55,7 +51,7 @@ public class QuotesService {
                 }
 
                 if (rawResponse.contains("\"error\"") && !rawResponse.contains("\"data\"")) {
-                    return staleOrError(cacheKey, "Upstream returned error");
+                    return staleOrError(cacheKey, rawResponse);
                 }
 
                 String normalized = normalizeResponse(rawResponse, finalKeys, false);
@@ -106,9 +102,7 @@ public class QuotesService {
         List<String> raw = splitCsv(keys);
         Set<String> unique = new LinkedHashSet<>();
         for (String part : raw) {
-            if (!part.isBlank()) {
-                unique.add(part.trim());
-            }
+            if (!part.isBlank()) unique.add(part.trim());
         }
         return String.join(",", unique);
     }
@@ -118,9 +112,7 @@ public class QuotesService {
         if (text == null || text.isBlank()) return out;
         for (String part : text.split(",")) {
             String value = part.trim();
-            if (!value.isBlank()) {
-                out.add(value);
-            }
+            if (!value.isBlank()) out.add(value);
         }
         return out;
     }
@@ -195,10 +187,6 @@ public class QuotesService {
             if (parts.length == 2 && !parts[1].isBlank()) {
                 return parts[1].trim().toUpperCase().replace(" ", "_");
             }
-        }
-
-        if (rawSymbol.contains(":")) {
-            return rawSymbol.substring(rawSymbol.indexOf(":") + 1).trim().toUpperCase().replace(" ", "_");
         }
 
         return rawSymbol.trim().toUpperCase().replace(" ", "_");
