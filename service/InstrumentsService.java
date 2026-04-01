@@ -22,7 +22,9 @@ public class InstrumentsService {
     }
 
     public static void syncMasterIfConfigured() {
-        // no-op now; master file dependency removed
+        for (Instrument instrument : SearchService.snapshot()) {
+            addInstrument(instrument);
+        }
     }
 
     public static Instrument getByInstrumentKey(String key) {
@@ -40,6 +42,13 @@ public class InstrumentsService {
             Instrument cached = BY_SYMBOL.get(symbol);
             if (cached != null) {
                 out.add(cached.getInstrumentKey());
+                continue;
+            }
+
+            Instrument exactFromMaster = SearchService.findExactInstrument(raw);
+            if (exactFromMaster != null) {
+                addInstrument(exactFromMaster);
+                out.add(exactFromMaster.getInstrumentKey());
                 continue;
             }
 
@@ -63,12 +72,18 @@ public class InstrumentsService {
 
     public static String search(String query, int limit) {
         try {
+            List<Instrument> parsed;
+
             if (query == null || query.isBlank()) {
-                return defaultIndices(limit);
+                parsed = SearchService.getDefaultIndices(limit);
+            } else {
+                parsed = SearchService.findInstruments(query, limit);
             }
 
-            String raw = UpstoxConnector.searchInstruments(query, limit);
-            List<Instrument> parsed = parseInstrumentSearchResponse(raw, limit);
+            if (parsed.isEmpty() && query != null && !query.isBlank()) {
+                String raw = UpstoxConnector.searchInstruments(query, limit);
+                parsed = parseInstrumentSearchResponse(raw, limit);
+            }
 
             for (Instrument instrument : parsed) {
                 addInstrument(instrument);
@@ -76,10 +91,10 @@ public class InstrumentsService {
 
             StringBuilder sb = new StringBuilder();
             sb.append("{")
-              .append("\"success\":true,")
-              .append("\"timestamp\":").append(System.currentTimeMillis()).append(",")
-              .append("\"count\":").append(parsed.size()).append(",")
-              .append("\"data\":[");
+                    .append("\"success\":true,")
+                    .append("\"timestamp\":").append(System.currentTimeMillis()).append(",")
+                    .append("\"count\":").append(parsed.size()).append(",")
+                    .append("\"data\":[");
 
             for (int i = 0; i < parsed.size(); i++) {
                 if (i > 0) sb.append(",");
@@ -108,10 +123,10 @@ public class InstrumentsService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("{")
-          .append("\"success\":true,")
-          .append("\"timestamp\":").append(System.currentTimeMillis()).append(",")
-          .append("\"count\":").append(indices.size()).append(",")
-          .append("\"data\":[");
+                .append("\"success\":true,")
+                .append("\"timestamp\":").append(System.currentTimeMillis()).append(",")
+                .append("\"count\":").append(indices.size()).append(",")
+                .append("\"data\":[");
 
         for (int i = 0; i < indices.size(); i++) {
             if (i > 0) sb.append(",");
@@ -127,9 +142,9 @@ public class InstrumentsService {
                 + "\"success\":true,"
                 + "\"timestamp\":" + System.currentTimeMillis() + ","
                 + "\"data\":{"
-                + "\"synced\":true,"
-                + "\"lastSyncAt\":0,"
-                + "\"lastSyncStatus\":\"SEARCH_API_MODE\","
+                + "\"synced\":" + (SearchService.getMasterCount() > 0) + ","
+                + "\"lastSyncAt\":" + SearchService.getLastSyncAt() + ","
+                + "\"lastSyncStatus\":\"" + escape(SearchService.getLastSyncStatus()) + "\","
                 + "\"instrumentCount\":" + BY_SYMBOL.size()
                 + "},"
                 + "\"error\":null"
@@ -138,9 +153,9 @@ public class InstrumentsService {
 
     public static String getHealthStatsJson() {
         return "{"
-                + "\"synced\":true,"
-                + "\"lastSyncAt\":0,"
-                + "\"lastSyncStatus\":\"SEARCH_API_MODE\","
+                + "\"synced\":" + (SearchService.getMasterCount() > 0) + ","
+                + "\"lastSyncAt\":" + SearchService.getLastSyncAt() + ","
+                + "\"lastSyncStatus\":\"" + escape(SearchService.getLastSyncStatus()) + "\","
                 + "\"instrumentCount\":" + BY_SYMBOL.size()
                 + "}";
     }
@@ -225,30 +240,9 @@ public class InstrumentsService {
     }
 
     private static void addInstrument(Instrument instrument) {
+        if (instrument == null) return;
         BY_SYMBOL.put(normalize(instrument.getSymbol()), instrument);
         BY_KEY.put(instrument.getInstrumentKey(), instrument);
-    }
-
-    private static String defaultIndices(int limit) {
-        List<Instrument> out = new ArrayList<>();
-        addIfPresent(out, "NIFTY");
-        addIfPresent(out, "BANKNIFTY");
-        addIfPresent(out, "SENSEX");
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("{")
-          .append("\"success\":true,")
-          .append("\"timestamp\":").append(System.currentTimeMillis()).append(",")
-          .append("\"count\":").append(Math.min(limit, out.size())).append(",")
-          .append("\"data\":[");
-
-        for (int i = 0; i < out.size() && i < limit; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(out.get(i).toJson());
-        }
-
-        sb.append("],\"error\":null}");
-        return sb.toString();
     }
 
     private static String normalize(String value) {
