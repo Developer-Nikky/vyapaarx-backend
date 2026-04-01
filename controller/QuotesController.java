@@ -2,81 +2,63 @@ package controller;
 
 import com.sun.net.httpserver.HttpExchange;
 import service.QuotesService;
-import service.SearchService;
+
+import java.io.IOException;
 import java.io.OutputStream;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 public class QuotesController {
 
-    public static void handle(HttpExchange ex) {
+    public static void handle(HttpExchange exchange) throws IOException {
         try {
-            // 1. SECURITY CHECK (Bearer Token)
-            String auth = ex.getRequestHeaders().getFirst("Authorization");
-            if (auth == null || !auth.equals("Bearer VyapaarX_Alpha_2026")) {
-                send(ex, 401, "{\"error\":\"Unauthorized\"}");
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, error("Method not allowed"));
                 return;
             }
 
-            String path = ex.getRequestURI().getPath();
-            String query = ex.getRequestURI().getQuery();
+            String keys = getQueryParam(exchange.getRequestURI(), "keys");
 
-            // 2. ROUTING: UNIVERSAL SEARCH (Dhan Style Search)
-            // Endpoint: /search?q=RELIANCE
-            if (path.equals("/search")) {
-                if (query != null && query.contains("q=")) {
-                    String searchTerm = query.split("q=")[1];
-                    String decodedSearch = URLDecoder.decode(searchTerm, StandardCharsets.UTF_8);
-                    
-                    List<String> results = SearchService.find(decodedSearch);
-                    
-                    // JSON format mein convert kar rahe hain
-                    StringBuilder json = new StringBuilder("{\"results\":[");
-                    for (int i = 0; i < results.size(); i++) {
-                        json.append("\"").append(results.get(i)).append("\"");
-                        if (i < results.size() - 1) json.append(",");
-                    }
-                    json.append("]}");
-                    
-                    send(ex, 200, json.toString());
-                    return;
-                }
-            }
+            String response = QuotesService.getQuotes(keys);
 
-            // 3. ROUTING: LIVE QUOTES & WATCHLIST ADD
-            // Endpoint: /quotes?symbols=NSE_EQ|RELIANCE
-            if (path.equals("/quotes")) {
-                if (query != null && query.contains("symbols=")) {
-                    String symbols = query.split("symbols=")[1];
-                    String decodedSymbols = URLDecoder.decode(symbols, StandardCharsets.UTF_8);
-                    
-                    // Service ko bol rahe hain ki naye symbols add kare
-                    QuotesService.addSymbols(decodedSymbols);
-                }
-
-                // Hamesha latest cache data bhejo (₹1,00,000 wallet logic ke liye)
-                send(ex, 200, QuotesService.getQuotesFromCache());
-                return;
-            }
-
-            // Default 404
-            send(ex, 404, "{\"error\":\"Endpoint Not Found\"}");
+            int status = response.contains("\"success\":false") ? 502 : 200;
+            send(exchange, status, response);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            try { send(ex, 500, "{\"error\":\"Internal Server Error\"}"); } catch (Exception ignored) {}
+            send(exchange, 500, error(e.getMessage()));
         }
     }
 
-    private static void send(HttpExchange ex, int code, String body) throws java.io.IOException {
-        byte[] b = body.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        // CORS handle karne ke liye (Mobile app connectivity)
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        ex.sendResponseHeaders(code, b.length);
+    private static void send(HttpExchange ex, int status, String json) throws IOException {
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "no-store");
+        ex.sendResponseHeaders(status, bytes.length);
+
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(b);
+            os.write(bytes);
         }
+    }
+
+    private static String getQueryParam(URI uri, String key) {
+        String query = uri.getRawQuery();
+        if (query == null) return null;
+
+        for (String param : query.split("&")) {
+            String[] pair = param.split("=", 2);
+            if (pair.length == 2 && pair[0].equals(key)) {
+                return URLDecoder.decode(pair[1], StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    private static String error(String msg) {
+        return "{\"success\":false,\"error\":\"" + escape(msg) + "\",\"data\":[]}";
+    }
+
+    private static String escape(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
