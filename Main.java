@@ -6,6 +6,7 @@ import controller.UserController;
 import service.QuotesService;
 
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -15,7 +16,6 @@ public class Main {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
-        // Warm important quotes in background
         ScheduledExecutorService warmWorker = Executors.newSingleThreadScheduledExecutor();
         warmWorker.scheduleAtFixedRate(() -> {
             try {
@@ -25,7 +25,6 @@ public class Main {
             }
         }, 0, 2, TimeUnit.SECONDS);
 
-        // Routes
         server.createContext("/quotes", QuotesController::handle);
         server.createContext("/market/status", MarketController::handle);
         server.createContext("/user/me", UserController::handle);
@@ -38,7 +37,7 @@ public class Main {
                     + "\"service\":\"vyapaarx-backend\","
                     + "\"timestamp\":" + System.currentTimeMillis()
                     + "}";
-            byte[] bytes = response.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
             exchange.sendResponseHeaders(200, bytes.length);
             try (var os = exchange.getResponseBody()) {
