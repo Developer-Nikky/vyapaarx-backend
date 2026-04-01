@@ -19,7 +19,6 @@ public class QuotesController {
             }
 
             String keys = getQueryParam(exchange.getRequestURI(), "keys");
-
             String response = QuotesService.getQuotes(keys);
 
             int status = response.contains("\"success\":false") ? 502 : 200;
@@ -43,7 +42,7 @@ public class QuotesController {
 
     private static String getQueryParam(URI uri, String key) {
         String query = uri.getRawQuery();
-        if (query == null) return null;
+        if (query == null || query.isBlank()) return null;
 
         for (String param : query.split("&")) {
             String[] pair = param.split("=", 2);
