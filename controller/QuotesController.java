@@ -18,9 +18,11 @@ public class QuotesController {
                 return;
             }
 
-            String keys = getQueryParam(exchange.getRequestURI(), "keys");
-            String response = QuotesService.getQuotes(keys);
+            URI uri = exchange.getRequestURI();
+            String keys = getQueryParam(uri, "keys");
+            String symbols = getQueryParam(uri, "symbols");
 
+            String response = QuotesService.getQuotesByRequest(keys, symbols);
             int status = response.contains("\"success\":false") ? 502 : 200;
             send(exchange, status, response);
 
@@ -34,7 +36,6 @@ public class QuotesController {
         ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         ex.getResponseHeaders().set("Cache-Control", "no-store");
         ex.sendResponseHeaders(status, bytes.length);
-
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
         }
