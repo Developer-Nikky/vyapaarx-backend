@@ -13,24 +13,22 @@ public class TradeController {
 
     public static void handle(HttpExchange exchange) throws IOException {
         try {
-            String method = exchange.getRequestMethod();
-
             String userId = exchange.getRequestHeaders().getFirst("X-USER-ID");
             if (userId == null || userId.isBlank()) {
                 send(exchange, 401, error("Missing user id"));
                 return;
             }
 
-            if ("POST".equalsIgnoreCase(method)) {
-                String body = readBody(exchange);
-                String response = TradeService.executeTrade(userId, body);
-                send(exchange, 200, response);
+            String method = exchange.getRequestMethod();
+
+            if ("GET".equalsIgnoreCase(method)) {
+                send(exchange, 200, TradeService.getPortfolio(userId));
                 return;
             }
 
-            if ("GET".equalsIgnoreCase(method)) {
-                String response = TradeService.getPortfolio(userId);
-                send(exchange, 200, response);
+            if ("POST".equalsIgnoreCase(method)) {
+                String body = readBody(exchange);
+                send(exchange, 200, TradeService.executeTrade(userId, body));
                 return;
             }
 
@@ -47,11 +45,9 @@ public class TradeController {
         );
         StringBuilder body = new StringBuilder();
         String line;
-
         while ((line = reader.readLine()) != null) {
             body.append(line);
         }
-
         return body.toString();
     }
 
@@ -59,7 +55,6 @@ public class TradeController {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);
-
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
         }
