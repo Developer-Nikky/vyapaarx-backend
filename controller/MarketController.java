@@ -35,6 +35,10 @@ public class MarketController {
     }
 
     private static String error(String msg) {
-        return "{\"success\":false,\"error\":\"" + msg + "\"}";
+        return "{\"success\":false,\"error\":\"" + escape(msg) + "\"}";
+    }
+
+    private static String escape(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
