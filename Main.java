@@ -20,20 +20,20 @@ public class Main {
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
 
-        // Bootstrap defaults first
+        // Step 1: Bootstrap default instruments
         InstrumentsService.bootstrapDefaults();
 
-        // Background instrument master sync
+        // Step 2: Start background master sync
         SearchService.initMasterData();
 
-        // Optional sync hook for future external/master merge
+        // Step 3: Initial sync hook
         InstrumentsService.syncMasterIfConfigured();
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
-        // Warm only important quotes at a safer interval
+        // Warm important quotes in background
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 QuotesService.warmCriticalQuotes();
@@ -42,7 +42,7 @@ public class Main {
             }
         }, 3, 8, TimeUnit.SECONDS);
 
-        // Periodic instrument refresh
+        // Periodic instrument refresh hook
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 SearchService.refreshMasterDataIfEmpty();
@@ -63,9 +63,11 @@ public class Main {
         server.createContext("/instruments/indices", InstrumentsController::handle);
         server.createContext("/instruments/sync", InstrumentsController::handle);
 
+        // Health route with HEAD request fix
         server.createContext("/health", exchange -> {
             try {
                 String method = exchange.getRequestMethod();
+
                 String response = "{"
                         + "\"success\":true,"
                         + "\"status\":\"ok\","
@@ -75,6 +77,7 @@ public class Main {
                         + "}";
 
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+
                 exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
                 exchange.getResponseHeaders().set("Cache-Control", "no-store");
 
@@ -86,18 +89,30 @@ public class Main {
                         os.write(bytes);
                     }
                 }
+
             } catch (Exception e) {
-                String error = "{\"success\":false,\"status\":\"error\",\"message\":\"" + escape(e.getMessage()) + "\"}";
+                String error = "{"
+                        + "\"success\":false,"
+                        + "\"status\":\"error\","
+                        + "\"message\":\"" + escape(e.getMessage()) + "\""
+                        + "}";
+
                 byte[] bytes = error.getBytes(StandardCharsets.UTF_8);
+
                 exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-                exchange.sendResponseHeaders(500, bytes.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(bytes);
+
+                if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(500, -1);
+                } else {
+                    exchange.sendResponseHeaders(500, bytes.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(bytes);
+                    }
                 }
             }
         });
 
-        // Safer for small/free infra
+        // Safer thread pool for free hosting
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
 
