@@ -17,7 +17,6 @@ public class UserController {
             }
 
             String userId = exchange.getRequestHeaders().getFirst("X-USER-ID");
-
             if (userId == null || userId.isBlank()) {
                 send(exchange, 401, error("Missing user id"));
                 return;
@@ -35,7 +34,6 @@ public class UserController {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);
-
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
         }
